@@ -1,0 +1,30 @@
+# Packages EXCLUDED from the resolved ALARM `base` metapackage closure.
+# One POSIX ERE (grep -E) per line, matched against package names. If a kept
+# package hard-depends a dropped one, pacman pulls it back — the smoke test
+# catches that, so only truly virtualizable deps may be excluded here:
+#   systemd/systemd-sysvcompat are handled by --assume-installed (ALARM's
+#   pacman hard-depends systemd).
+#   e2fsprogs is intentionally NOT excluded: krb5 hard-depends it.
+#   systemd-libs stays: everything links libsystemd.
+
+# --- the base meta-package is a build-time seed, not part of the image -------
+^base$
+
+# --- systemd can never run inside proot (no kernel access) -------------------
+^systemd$
+^systemd-sysvcompat$
+^systemd-resolvconf$
+
+# --- kernel / initramfs / firmware: nothing a container can use --------------
+^linux-firmware
+^linux-(aarch64|armv7|rpi|odroid|imx)
+^mkinitcpio(-busybox|-archiso)?$
+
+# --- daemons that are dead weight inside a container -------------------------
+^cryptsetup$
+^device-mapper$
+^iptables$
+^nftables$
+^dhcpcd$
+^netctl$
+^gpm$

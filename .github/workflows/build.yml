@@ -1,0 +1,84 @@
+# alarm-proot — build arm64 image, smoke-test it, publish to GHCR.
+# Nothing is published unless the smoke test passes inside the built image.
+
+name: build
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 4 * * *'        # daily UTC 04:00
+  workflow_dispatch:           # manual "Run workflow" button
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/adix57/alarm-proot
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Stamp
+        id: stamp
+        run: |
+          echo "date=$(date -u +%Y%m%d)"      >> "$GITHUB_OUTPUT"
+          echo "isodate=$(date -u -Iseconds)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU (arm64 emulation)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build rootfs image (linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          load: true
+          tags: ${{ env.IMAGE }}:ci
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_DATE=${{ steps.stamp.outputs.isodate }}
+
+      - name: Smoke test (runs inside the arm64 image, before publishing)
+        run: |
+          docker run --platform linux/arm64 -i --rm \
+            --entrypoint /bin/bash "${IMAGE}:ci" -s < tests/smoke.sh
+
+      - name: Log in to GHCR
+        if: success()
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish (latest + date + sha tags)
+        if: success()
+        run: |
+          set -e
+          date_tag="${{ steps.stamp.outputs.date }}"
+          sha_tag="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+          docker tag  "${IMAGE}:ci" "$IMAGE:latest"
+          docker tag  "${IMAGE}:ci" "${IMAGE}:$date_tag"
+          docker tag  "${IMAGE}:ci" "${IMAGE}:$sha_tag"
+          # registry dedupes shared layers server-side, so these pushes are cheap
+          docker push "$IMAGE:latest"
+          docker push "${IMAGE}:$date_tag"
+          docker push "${IMAGE}:$sha_tag"
+          size=$(docker image inspect "${IMAGE}:ci" --format '{{.Size}}' | numfmt --to=iec)
+          echo "pushed ${IMAGE}:latest (+ :$date_tag, :$sha_tag) — uncompressed size $size"

@@ -1,0 +1,5 @@
+# artifacts only — everything in this repo is a recipe, nothing built by hand
+*.tar.gz
+*.oci
+*.tar
+*.partial

@@ -1,0 +1,7 @@
+# EXTRA packages added on top of the filtered base set; one per line.
+# Anyone may PR their must-have here after showing it fits (no systemd/kernel/-
+# firmware). Examples:
+#   openssh
+#   curl
+#   vim
+#   git
