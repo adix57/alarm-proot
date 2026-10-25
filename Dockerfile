@@ -35,13 +35,18 @@ COPY rootfs.d/ /rootfs.d/
 COPY build-rootfs.sh /build-rootfs.sh
 
 # --- ALARM signing keys, from the official archlinuxarm/PKGBUILDs repo -------
+# pacman-key's keyring search path differs by build: Debian sid's pacman
+# reads /usr/share/keyrings/, while ALARM's keyring package (and older
+# pacman builds) install under /usr/share/pacman/keyrings/. Fetch once,
+# then make both locations hold identical copies.
 RUN set -eux; \
-    mkdir -p /usr/share/pacman/keyrings; \
+    mkdir -p /usr/share/pacman/keyrings /usr/share/keyrings; \
     for f in archlinuxarm-revoked archlinuxarm-trusted archlinuxarm.gpg; do \
         curl -fsSL --retry 3 \
             "https://raw.githubusercontent.com/archlinuxarm/PKGBUILDs/master/core/archlinuxarm-keyring/${f}" \
             -o "/usr/share/pacman/keyrings/${f}"; \
-    done
+    done; \
+    cp -a /usr/share/pacman/keyrings/archlinuxarm* /usr/share/keyrings/
 
 # --- assemble the rootfs -----------------------------------------------------
 RUN bash /build-rootfs.sh

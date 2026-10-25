@@ -157,6 +157,10 @@ mkdir -p "$ROOTFS/usr/share/pacman/keyrings"
 for f in archlinuxarm-revoked archlinuxarm-trusted archlinuxarm.gpg; do
     cp -a "/usr/share/pacman/keyrings/$f" "$ROOTFS/usr/share/pacman/keyrings/$f"
 done
+# pacman>=7.1 reads /usr/share/keyrings; older builds and ALARM's keyring
+# package use /usr/share/pacman/keyrings — bake both so any pacman build works
+mkdir -p "$ROOTFS/usr/share/keyrings"
+cp -a "$ROOTFS/usr/share/pacman/keyrings"/archlinuxarm* "$ROOTFS/usr/share/keyrings/"
 # reuse the builder's already-populated gnupg home as the target's
 mkdir -p "$ROOTFS/etc/pacman.d"
 rm -rf "$ROOTFS/etc/pacman.d/gnupg"

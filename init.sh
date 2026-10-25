@@ -257,6 +257,21 @@ init_keyring() {
     else
         run pacman-key --init
     fi
+    # keyring FILE location: pacman>=7.1 reads /usr/share/keyrings; older
+    # pacman builds and ALARM's archlinuxarm-keyring package place the files
+    # under /usr/share/pacman/keyrings. Whichever shipped them, mirror to the
+    # other so '--populate archlinuxarm' always finds its needles.
+    local src dst
+    for src in /usr/share/pacman/keyrings /usr/share/keyrings; do
+        [ -f "$src/archlinuxarm.gpg" ] || continue
+        dst=/usr/share/keyrings
+        [ "$src" = "$dst" ] && dst=/usr/share/pacman/keyrings
+        if [ ! -f "$dst/archlinuxarm.gpg" ]; then
+            run mkdir -p "$dst"
+            run cp -a "$src"/archlinuxarm* "$dst"/
+            ok "keyring files mirrored into $dst"
+        fi
+    done
     run pacman-key --populate archlinuxarm
 }
 
