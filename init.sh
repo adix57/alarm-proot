@@ -274,7 +274,17 @@ init_keyring() {
             ok "keyring files mirrored into $dst"
         fi
     done
-    run pacman-key --populate archlinuxarm
+    run pacman-key --populate archlinuxarm \
+        || {
+            # A secretless baked keyring refuses populate ("no secret key
+            # available to sign with") — generate the synthetic local
+            # master HERE, on-device, then retry: per-device key, as on
+            # any regular Arch install.
+            warn "populate failed (no local secret?) — running pacman-key --init and retrying ..."
+            run pacman-key --init
+            run pacman-key --populate archlinuxarm \
+                || warn "populate retry failed (kept offline-safe)"
+        }
 }
 
 # --- 3b. repository sync (network, best effort, stale-keyring fallback) ---------

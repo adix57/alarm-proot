@@ -49,10 +49,27 @@ if [ -s /etc/machine-id ]; then
 fi
 pass "machine-id empty"
 
-# 8. keyring sane
-POP_ERR=$(pacman-key --populate archlinuxarm 2>&1) \
-    || { printf '%s\n' "$POP_ERR" | head -20 >&2; fail "keyring populate failed (gpg output above)"; }
-pass "keyring checks out"
+# 8. keyring functional WITHOUT any secret material:
+#    ALARM master key present in the public ring and fully trusted, so
+#    signature verification (check 9) will work. populate/--init are NOT
+#    run here: they demand the synthetic local master secret, which is
+#    deliberately not baked — init.sh creates it per-device when needed.
+HOMEDIR=/etc/pacman.d/gnupg
+[ -s "$HOMEDIR/trustdb.gpg" ] || fail "trustdb.gpg missing from the keyring"
+if [ ! -s "$HOMEDIR/pubring.kbx" ] && [ ! -s "$HOMEDIR/pubring.gpg" ]; then
+    fail "public keyring (pubring.kbx/.gpg) missing from the keyring"
+fi
+ALARM_FPR=$(sed -n 's/^\([0-9A-F]\{40\}\).*$/\1/p' \
+    /usr/share/pacman/keyrings/archlinuxarm-trusted | head -1)
+[ -n "$ALARM_FPR" ] || fail "archlinuxarm-trusted carries no key fingerprints"
+if ! gpg --homedir "$HOMEDIR" --batch --list-keys --with-colons \
+        "$ALARM_FPR" >/dev/null 2>&1; then
+    fail "ALARM master key ($ALARM_FPR) not in the keyring"
+fi
+if ! gpg --homedir "$HOMEDIR" --batch --export-ownertrust | grep -F "$ALARM_FPR" >/dev/null; then
+    fail "ALARM master key ($ALARM_FPR) is not fully trusted in the trustdb"
+fi
+pass "keyring sane (ALARM master trusted, no secrets baked)"
 
 # 9. live repo sync — proves mirror + keyring + DNS in one shot
 pacman --noconfirm -Sy >/dev/null || fail "pacman -Sy failed (network/mirror/keyring)"

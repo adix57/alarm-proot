@@ -162,23 +162,31 @@ done
 mkdir -p "$ROOTFS/usr/share/keyrings"
 cp -a "$ROOTFS/usr/share/pacman/keyrings"/archlinuxarm* "$ROOTFS/usr/share/keyrings/"
 
-# Initialize and populate the gnupg home INSIDE the target with the target's
-# own gpg, instead of copying the builder's home over — cross-version gnupg
-# state (trustdb/keybox bytecode) has bitten populate runs in the image.
-# Afterwards drop all private material: the image must bake public keys and
-# the trust db only; devices re-derive the synthetic local master on demand.
+# Initialize the target gnupg home with the TARGET's own gpg, using only
+# public-material operations: import the ALARM keybox and set the master
+# key's ownertrust. (pacman-key --populate insists on signing with the
+# synthetic local master secret — deliberately NOT baked here; init.sh
+# generates that per-device when a populate/sign ceremony ever needs it.)
+ALARM_FPR=$(sed -n 's/^\([0-9A-F]\{40\}\).*$/\1/p' \
+    "$ROOTFS/usr/share/pacman/keyrings/archlinuxarm-trusted" | head -1)
+[ -n "$ALARM_FPR" ] || die "archlinuxarm-trusted carries no key fingerprints"
 rm -rf "$ROOTFS/etc/pacman.d/gnupg"
-mkdir -p "$ROOTFS/etc/pacman.d"
-chroot "$ROOTFS" pacman-key --init \
-    || die "target pacman-key --init failed — see the gpg output above"
-chroot "$ROOTFS" pacman-key --populate archlinuxarm \
-    || die "target pacman-key --populate failed — see the gpg output above"
-GPG_ROOT="$ROOTFS/etc/pacman.d/gnupg"
-find "$GPG_ROOT" -maxdepth 1 \( -name '*.lock' -o -name 'S.*' \) -delete 2>/dev/null || true
-rm -rf "$GPG_ROOT/private-keys-v1.d" "$GPG_ROOT/openpgp-revocs.d"
-chmod 700 "$GPG_ROOT"
-[ -s "$GPG_ROOT/trustdb.gpg" ] || die "target keyring missing trustdb"
-info "target keyring ready (public keys + trust db only, no private material)"
+install -d -m 700 "$ROOTFS/etc/pacman.d/gnupg"
+chroot "$ROOTFS" gpg --homedir /etc/pacman.d/gnupg --batch --no-tty \
+    --import /usr/share/pacman/keyrings/archlinuxarm.gpg \
+    || die "import of archlinuxarm.gpg failed — see the gpg output above"
+chroot "$ROOTFS" gpg --homedir /etc/pacman.d/gnupg --batch --no-tty \
+    --import-ownertrust /usr/share/pacman/keyrings/archlinuxarm-trusted \
+    || die "import of ALARM ownertrust failed — see the gpg output above"
+chroot "$ROOTFS" gpg --homedir /etc/pacman.d/gnupg --batch --no-tty \
+    --list-keys "$ALARM_FPR" >/dev/null \
+    || die "ALARM master key missing from the target keyring after import"
+chroot "$ROOTFS" gpg --homedir /etc/pacman.d/gnupg --batch --no-tty \
+    --export-ownertrust | grep -F "$ALARM_FPR" >/dev/null \
+    || die "ALARM master key not marked trusted in the target trustdb"
+find "$ROOTFS/etc/pacman.d/gnupg" -maxdepth 1 -name '*.lock' -delete 2>/dev/null || true
+[ -s "$ROOTFS/etc/pacman.d/gnupg/trustdb.gpg" ] || die "target keyring missing trustdb"
+info "target keyring ready (ALARM master $ALARM_FPR trusted; no secret material baked)"
 
 # ---------------------------------------------------------------- 7 language
 log "7/10 generating the en_US.UTF-8 locale ..."
