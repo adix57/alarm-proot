@@ -52,14 +52,21 @@ info "pacman.conf installed (tuned for proot)"
 # --------------------------------------------------------- 1 builder keyring
 log "1/10 builder keyring ..."
 if [ ! -s /etc/pacman.d/gnupg/trustdb.gpg ]; then
-    pacman-key --init
+    pacman-key --init \
+        || die "pacman-key --init failed — read the gpg error lines printed just above"
 fi
-pacman-key --populate archlinuxarm
+pacman-key --populate archlinuxarm \
+    || die "pacman-key --populate archlinuxarm failed — read the gpg error lines printed just above"
 info "builder trusts archlinuxarm keys"
 
 # ------------------------------------------------------- 2 builder repo sync
 log "2/10 syncing ALARM repositories on the builder ..."
-pacman --noconfirm -Sy
+# fail fast with a precise reason if the mirror is unreachable from this runner
+curl -fsS --retry 3 --max-time 60 -o /dev/null \
+    'http://mirror.archlinuxarm.org/aarch64/core/core.db' \
+    || die "cannot fetch aarch64 core.db from mirror.archlinuxarm.org (network/DNS/mirror outage) — see curl error above"
+pacman --noconfirm -Sy \
+    || die "pacman -Sy failed — read the pacman error lines printed just above"
 info "repos synced"
 
 # ------------------------------------------------------- 3 resolve packages
@@ -120,7 +127,8 @@ pacman \
     -Sy --needed \
     --assume-installed systemd \
     --assume-installed systemd-sysvcompat \
-    --noconfirm "${PKGS[@]}"
+    --noconfirm "${PKGS[@]}" \
+    || die "package transaction failed — read the pacman error lines printed just above"
 rm -rf "$CACHE"
 
 # pacman's local DB entry claims systemd, which is virtualized; drop the line
