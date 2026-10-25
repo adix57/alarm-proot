@@ -2,96 +2,107 @@
 
 Arch Linux ARM **aarch64** rootfs image, purpose-built for
 [proot-distro](https://github.com/termux/proot-distro) on **Termux / Android**.
-Built daily from the official Arch Linux ARM mirrors, smoke-tested before it is
-ever published.
+Built daily from the official Arch Linux ARM mirrors and smoke-tested before
+every publish.
 
-**One-time install, forever updated by `pacman -Syu`.** GitHub is only the
-assembly line — once the container is installed on your phone, nothing in it
-ever needs GitHub again.
+**Install once, update forever with `pacman -Syu`.** GitHub is only the
+assembly line: once the container is installed on your device, nothing inside
+it ever needs GitHub again.
 
 ## Why not the official tarball?
 
-The generic ALARM tarball carries ~1.4 GB that a proot container can never use:
-kernel + device trees + initramfs, SoC/Wi-Fi firmware, and systemd. A proot
-container has no kernel access, so none of it can ever run — it is only wasted
-download, disk churn, and delete-time. This image simply *never* fetches them.
+The generic ALARM tarball ships roughly **1.4 GB** that a proot container can
+never use — kernel, device trees, initramfs, SoC/Wi-Fi firmware, and systemd.
+A proot container has no kernel access, so none of it can ever run; it is pure
+wasted download, disk churn, and delete time. This image simply never fetches
+any of it.
 
-|                            | official tarball        | this image            |
-|----------------------------|-------------------------|-----------------------|
-| initial download           | 791 MB                  | **~100 MB**           |
-| useless bytes fetched      | ~1.4 GB                 | **0**                 |
-| final installed size       | ~0.7 GB (after cleanup) | ~0.52 GB              |
-| systemd                    | installed, then deleted | **never installed**   |
-| freshness                  | tarball snapshot date   | rebuilt daily         |
+|                          | Official tarball        | This image          |
+| ------------------------ | ----------------------- | ------------------- |
+| Initial download         | 791 MB                  | **~100 MB**         |
+| Unusable bytes fetched   | ~1.4 GB                 | **0**               |
+| Final installed size     | ~0.7 GB (after cleanup) | ~0.52 GB            |
+| systemd                  | Installed, then deleted | **Never installed** |
+| Freshness                | Tarball snapshot date   | Rebuilt daily       |
 
-Measured against the real ALARM sync databases (see the pipeline below):
-resolved set of ~116 packages, 96 MiB compressed, 520 MiB installed.
+Measured against the live ALARM sync databases (see [Build pipeline](#build-pipeline)):
+a resolved set of ~116 packages, 96 MiB compressed, 520 MiB installed.
 
-## Install (Termux)
+## Installation
 
-Requires a current proot-distro with OCI image support (it pulls `ghcr.io`
-anonymously, no login, no token).
+Requires a current proot-distro with OCI image support. It pulls from
+`ghcr.io` anonymously — no login, no token.
 
 ```bash
 pkg install proot-distro git
+
+# pull and unpack the image
 proot-distro install ghcr.io/adix57/alarm-proot:latest --name archlinux
 
-# device-side personalization (DNS, ssh host keys, machine-id, root shell):
+# device-side personalization (DNS, SSH host keys, machine-id, root shell)
 curl -O https://raw.githubusercontent.com/adix57/alarm-proot/main/init.sh
 bash init.sh
 
-# enter it:
+# enter the container
 proot-distro login archlinux
 ```
 
-Pin a build for reproducibility with a date tag instead:
-`ghcr.io/adix57/alarm-proot:20261024` — every tag also matches a commit in
-this repo (see `/etc/alarm-proot-build` inside the image).
+To pin a build for reproducibility, use a date tag instead:
+`ghcr.io/adix57/alarm-proot:20261024`. Every tag also matches a commit in this
+repo (see `/etc/alarm-proot-build` inside the image).
 
-**First publish only:** the package starts as private. Make it public once
-(GitHub → this repo → *Packages* → alarm-proot → *Package settings* → *Change
-visibility* → Public) so anonymous pulls work.
+### First publish only
+
+The package starts out private. Make it public once so anonymous pulls work:
+GitHub → this repo → *Packages* → alarm-proot → *Package settings* → *Change
+visibility* → Public.
 
 ## What is inside
 
 - ALARM's **`base` userland**, resolved by pacman itself from the `base`
-  meta-package (ALARM's sync DBs carry no group data — the meta-package's
-  dependency list is the definition), then filtered through `rootfs.d/drop.txt`
-  — no systemd/systemd-sysvcompat/systemd-resolvconf (`systemd-libs` stays:
-  half the ecosystem links it), no `mkinitcpio*`, no kernels, no
-  `linux-firmware*`, no cryptsetup/iptables/nftables/dhcpcd/netctl/gpm
-- honesty note: ALARM's `pacman` package itself hard-depends `systemd`; that
-  one dependency is virtualized at build time (`--assume-installed`) and the
-  local pacman DB is patched to match — the `update()` alias installed by
-  `init.sh` keeps future full upgrades consistent
+  meta-package (ALARM's sync DBs carry no group data, so the meta-package's
+  dependency list is the definition), then filtered through
+  `rootfs.d/drop.txt`:
+  - no `systemd` / `systemd-sysvcompat` / `systemd-resolvconf`
+    (`systemd-libs` stays — half the ecosystem links it)
+  - no `mkinitcpio*`
+  - no kernels
+  - no `linux-firmware*`
+  - no `cryptsetup` / `iptables` / `nftables` / `dhcpcd` / `netctl` / `gpm`
 - `/etc/pacman.conf` rewritten for proot at build time: `CheckSpace` and
-  `DownloadUser` off (both degrade to failure modes in rootless proot),
-  `ParallelDownloads = 8`, single geo-routing mirror
+  `DownloadUser` disabled (both degrade to failure modes in rootless proot),
+  `ParallelDownloads = 8`, and a single geo-routing mirror
 - `en_US.UTF-8` locale generated at build; non-English message catalogs
   stripped
-- `/etc/alarm-proot-build` — provenance: build date, commit, package count and
-  package-list hash
-- keyring pre-populated (`archlinuxarm`), **no private keys baked**
+- `/etc/alarm-proot-build` — provenance file: build date, commit, package
+  count, and package-list hash
+- `archlinuxarm` keyring pre-populated; **no private keys baked in**
 
-Deliberately **not** baked in (per-device, regenerated at runtime by
-`init.sh`): DNS/resolv.conf, ssh host keys, machine-id.
+> **Note on pacman's systemd dependency:** ALARM's `pacman` package itself
+> hard-depends on `systemd`. That single dependency is virtualized at build
+> time (`--assume-installed`) and the local pacman database is patched to
+> match. The `update` alias installed by `init.sh` keeps future full upgrades
+> consistent.
 
-## Customizing your image (no Docker knowledge needed)
+Deliberately **not** baked in — these are per-device and regenerated at
+runtime by `init.sh`: DNS (`resolv.conf`), SSH host keys, and `machine-id`.
 
-Two plain text files control the build:
+## Customization
 
-- `rootfs.d/drop.txt` — *exclusions*. One POSIX regex (grep -E) per line,
-  matched against package names.
-- `rootfs.d/add.txt` — *extras* baked on top, one package name per line, e.g.
-  `openssh`, `curl`, `vim`.
+Two plain text files control the build — no Docker knowledge required:
 
-Edit → commit → push, or trigger manually: GitHub → this repo → **Actions** →
-*build* → *Run workflow*. About 15–40 minutes later the new image is in GHCR;
-your already-installed container keeps working unaffected (updating it is
-`update` — the alias `init.sh` installs, which keeps systemd virtualized —
-straight from ALARM mirrors).
+| File                  | Purpose                            | Format                                  |
+| --------------------- | ---------------------------------- | --------------------------------------- |
+| `rootfs.d/drop.txt`   | Package exclusions                 | One POSIX regex (`grep -E`) per line, matched against package names |
+| `rootfs.d/add.txt`    | Extra packages baked on top        | One package name per line, e.g. `openssh`, `curl`, `vim` |
 
-## The pipeline
+To apply changes: edit → commit → push, or trigger manually via GitHub → this
+repo → **Actions** → *build* → *Run workflow*. The new image reaches GHCR in
+about 15–40 minutes. An already-installed container keeps working unaffected;
+to update it, run `update` (the alias installed by `init.sh`, which keeps
+systemd virtualized) — packages come straight from the ALARM mirrors.
+
+## Build pipeline
 
 ```
 cron / manual / push
@@ -106,18 +117,19 @@ cron / manual / push
  └─ green → push ghcr.io/adix57/alarm-proot:{latest,YYYYMMDD,gitsha}
 ```
 
-A daily build that fails anything is **never published** — you get the failure
-email instead, and the registry keeps yesterday's known-good image.
+A daily build that fails any check is **never published**. You receive the
+failure notification instead, and the registry keeps the previous
+known-good image.
 
 ## Privacy
 
 This repo is a *recipe*, published for convenience: a Dockerfile, a workflow,
-and two text lists. Your phone, your container, and everything inside it stay
-on your phone — there is no upload path anywhere in this flow. The image
-itself contains only stock ALARM packages, the same ones `pacman` serves
+and two text lists. Your device, your container, and everything inside them
+stay on your device — there is no upload path anywhere in this flow. The image
+itself contains only stock ALARM packages, the same ones `pacman` serves to
 anyone.
 
-## Repo layout
+## Repository layout
 
 ```
 ├── Dockerfile                    # bootstrap stage → FROM scratch final
@@ -133,9 +145,11 @@ anyone.
 
 ## Troubleshooting
 
-- **`proot-distro install` can't pull** → package visibility still private
-  (see above), or old proot-distro without OCI support (`pkg upgrade proot-distro`).
-- **`pacman -Syu` fails inside** → usually DNS: re-run `bash init.sh` (it
-  repairs resolv.conf from the Termux side), or check your connection.
-- **Daily build failed** → check the Actions tab; the previous `latest` is
-  untouched and still installable.
+- **`proot-distro install` cannot pull** — the package is still private (see
+  [First publish only](#first-publish-only)), or the installed proot-distro
+  lacks OCI support (`pkg upgrade proot-distro`).
+- **`pacman -Syu` fails inside the container** — usually DNS: re-run
+  `bash init.sh` (it repairs `resolv.conf` from the Termux side), or check
+  your connection.
+- **Daily build failed** — check the Actions tab. The previous `latest` tag is
+  untouched and remains installable.
