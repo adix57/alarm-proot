@@ -30,8 +30,20 @@ log "0/10 sanity checks ..."
 [ "$(id -u)" = 0 ]        || die "must run as root inside the builder"
 [ -x /usr/bin/pacman ]    || die "pacman missing in builder"
 [ -f "$SRC/pacman.conf" ] || die "missing $SRC/pacman.conf"
-[ -e /proc/sys/fs/binfmt_misc/qemu-aarch64 ] \
-    || die "qemu-aarch64 binfmt not registered — run docker/setup-qemu-action first"
+# QEMU proof of life: under BuildKit, RUN containers get a fresh /proc mount
+# that often cannot see /proc/sys/fs/binfmt_misc, so probing that path
+# false-negatives in CI even when emulation works. The builder itself already
+# runs aarch64 binaries (this very script, bash, curl...), and qemu-user fakes
+# `uname -m` to the target arch; a native arm64 runner reports it natively —
+# so uname holds as the reliable signal in both cases.
+ARCH_FMT="$(uname -m 2>/dev/null || echo unknown)"
+[ "$ARCH_FMT" = aarch64 ] \
+    || die "builder userland is '$ARCH_FMT', not aarch64 — arm64 emulation (qemu binfmt) or a native arm64 runner is missing"
+if [ -e /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
+    info "qemu-aarch64 binfmt visible"
+else
+    info "binfmt_misc not visible from this RUN container (normal under BuildKit) — aarch64 userland confirmed via uname"
+fi
 
 # the same tuned config serves the builder AND the image
 cp "$SRC/pacman.conf" /etc/pacman.conf

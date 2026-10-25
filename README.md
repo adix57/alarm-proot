@@ -88,7 +88,8 @@ Two plain text files control the build:
 Edit → commit → push, or trigger manually: GitHub → this repo → **Actions** →
 *build* → *Run workflow*. About 15–40 minutes later the new image is in GHCR;
 your already-installed container keeps working unaffected (updating it is
-`pacman -Syu`, straight from ALARM mirrors).
+`update` — the alias `init.sh` installs, which keeps systemd virtualized —
+straight from ALARM mirrors).
 
 ## The pipeline
 

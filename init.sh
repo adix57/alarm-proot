@@ -306,8 +306,13 @@ run_upgrade_if_wanted() {
         warn "--upgrade requested but repositories are not synced — skipped"
         return 0
     fi
-    msg "running full upgrade (pacman -Syu) ..."
-    run pacman -Syu --noconfirm
+    msg "running full upgrade (pacman -Syu, systemd virtualized) ..."
+    # Same virtualization as the `update` alias: a newer pacman package from
+    # ALARM hard-depends systemd, and without this -Syu would pull the real
+    # systemd (plus cryptsetup, device-mapper, iptables, kbd, kmod, ...).
+    run pacman -Syu --noconfirm \
+        --assume-installed systemd \
+        --assume-installed systemd-sysvcompat
     ok "upgrade pass finished"
 }
 
@@ -468,11 +473,13 @@ alias ll='ls -lah --color=auto'
 alias la='ls -A --color=auto'
 alias grep='grep --color=auto'
 # ALARM's pacman hard-depends systemd; this keeps full upgrades dep-consistent
-# when ALARM someday ships a newer pacman package
-alias update='pacman -Syu --assume-installed systemd systemd-sysvcompat'
+# if/when ALARM ships a newer pacman package. NOTE: --assume-installed takes
+# ONE package per flag — repeat the flag; a bare second name would be parsed
+# as a transaction target and would install the real systemd-sysvcompat.
+alias update='pacman -Syu --assume-installed systemd --assume-installed systemd-sysvcompat'
 
 # ---- this container has no kernel access (proot) ---------------------------
-# upgrade:        pacman -Syu
+# upgrade:        update              (= pacman -Syu with systemd virtualized)
 # sshd:           mkdir -p /run/sshd && /usr/bin/sshd
 #                 ^ from Termux: proot-distro login archlinux -- /usr/bin/sshd
 #                 connect with: proot-distro login archlinux -P  (22 -> 2022)
@@ -516,7 +523,7 @@ write_marker_and_summary() {
     printf '  sshd (optional):    %smkdir -p /run/sshd && /usr/bin/sshd%s\n' "$C_B" "$C0"
     printf '                      %sproot-distro login archlinux -P   (port 22 -> 2022)%s\n' "$C_B" "$C0"
     printf '  timezone:           %sln -sf /usr/share/zoneinfo/<Area>/<City> /etc/localtime%s\n' "$C_B" "$C0"
-    printf '  full upgrade:       %spacman -Syu  (or re-run init.sh --upgrade)%s\n' "$C_B" "$C0"
+    printf '  full upgrade:       %supdate  (or re-run: bash /init.sh --upgrade)%s\n' "$C_B" "$C0"
     printf '  setup log:          /var/log/arch-proot-init.log\n'
     printf '  marker:             %s%s\n' "$marker" "$C0"
     if [ "$SYNC_OK" != 1 ]; then
