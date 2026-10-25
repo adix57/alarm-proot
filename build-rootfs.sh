@@ -30,6 +30,11 @@ log "0/10 sanity checks ..."
 [ "$(id -u)" = 0 ]        || die "must run as root inside the builder"
 [ -x /usr/bin/pacman ]    || die "pacman missing in builder"
 [ -f "$SRC/pacman.conf" ] || die "missing $SRC/pacman.conf"
+# pacman-key sources makepkg's util/*.sh libraries; without the Debian
+# 'makepkg' binary package installed they are absent and it dies instantly
+for sh in /usr/share/makepkg/util/message.sh /usr/share/makepkg/util/parseopts.sh; do
+    [ -f "$sh" ] || die "missing $sh — install the 'makepkg' package in the builder"
+done
 # QEMU proof of life: under BuildKit, RUN containers get a fresh /proc mount
 # that often cannot see /proc/sys/fs/binfmt_misc, so probing that path
 # false-negatives in CI even when emulation works. The builder itself already

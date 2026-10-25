@@ -15,10 +15,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LC_ALL=C
 
 # --- tooling on the builder (never reaches the final image) ------------------
+# makepkg is a SEPARATE binary package in Debian (same source as
+# pacman-package-manager) but pacman-key hard-sources its util/*.sh library
+# files, so it must be installed explicitly. gnupg is added explicitly too:
+# the slim default install only guarantees gpgv (apt's verifier), not a full
+# gpg command, and pacman-key needs gpg/gpgconf/dirmngr.
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         pacman-package-manager \
+        makepkg \
+        gnupg \
         curl \
         ca-certificates; \
     rm -rf /var/lib/apt/lists/*
