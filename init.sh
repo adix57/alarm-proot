@@ -252,7 +252,9 @@ RESOLV
 #       functional container.
 init_keyring() {
     msg "setting up the pacman keyring ..."
-    if [ -s /etc/pacman.d/gnupg/pubring.gpg ] && [ -s /etc/pacman.d/gnupg/trustdb.gpg ]; then
+    # modern gpg stores the public keyring as pubring.kbx (parses .gpg too)
+    if [ -s /etc/pacman.d/gnupg/trustdb.gpg ] \
+       && { [ -s /etc/pacman.d/gnupg/pubring.kbx ] || [ -s /etc/pacman.d/gnupg/pubring.gpg ]; }; then
         ok "keyring already initialized"
     else
         run pacman-key --init

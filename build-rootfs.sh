@@ -161,15 +161,24 @@ done
 # package use /usr/share/pacman/keyrings — bake both so any pacman build works
 mkdir -p "$ROOTFS/usr/share/keyrings"
 cp -a "$ROOTFS/usr/share/pacman/keyrings"/archlinuxarm* "$ROOTFS/usr/share/keyrings/"
-# reuse the builder's already-populated gnupg home as the target's
-mkdir -p "$ROOTFS/etc/pacman.d"
+
+# Initialize and populate the gnupg home INSIDE the target with the target's
+# own gpg, instead of copying the builder's home over — cross-version gnupg
+# state (trustdb/keybox bytecode) has bitten populate runs in the image.
+# Afterwards drop all private material: the image must bake public keys and
+# the trust db only; devices re-derive the synthetic local master on demand.
 rm -rf "$ROOTFS/etc/pacman.d/gnupg"
-cp -a /etc/pacman.d/gnupg "$ROOTFS/etc/pacman.d/gnupg"
-find "$ROOTFS/etc/pacman.d/gnupg" -name '*.lock' -delete
-rm -rf "$ROOTFS/etc/pacman.d/gnupg/private-keys-v1.d"
-chmod 700 "$ROOTFS/etc/pacman.d/gnupg"
-[ -s "$ROOTFS/etc/pacman.d/gnupg/trustdb.gpg" ] || die "target keyring missing trustdb"
-info "target keyring ready (public keys + trust db only)"
+mkdir -p "$ROOTFS/etc/pacman.d"
+chroot "$ROOTFS" pacman-key --init \
+    || die "target pacman-key --init failed — see the gpg output above"
+chroot "$ROOTFS" pacman-key --populate archlinuxarm \
+    || die "target pacman-key --populate failed — see the gpg output above"
+GPG_ROOT="$ROOTFS/etc/pacman.d/gnupg"
+find "$GPG_ROOT" -maxdepth 1 \( -name '*.lock' -o -name 'S.*' \) -delete 2>/dev/null || true
+rm -rf "$GPG_ROOT/private-keys-v1.d" "$GPG_ROOT/openpgp-revocs.d"
+chmod 700 "$GPG_ROOT"
+[ -s "$GPG_ROOT/trustdb.gpg" ] || die "target keyring missing trustdb"
+info "target keyring ready (public keys + trust db only, no private material)"
 
 # ---------------------------------------------------------------- 7 language
 log "7/10 generating the en_US.UTF-8 locale ..."

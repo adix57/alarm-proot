@@ -50,7 +50,8 @@ fi
 pass "machine-id empty"
 
 # 8. keyring sane
-pacman-key --populate archlinuxarm >/dev/null 2>&1 || fail "keyring populate failed"
+POP_ERR=$(pacman-key --populate archlinuxarm 2>&1) \
+    || { printf '%s\n' "$POP_ERR" | head -20 >&2; fail "keyring populate failed (gpg output above)"; }
 pass "keyring checks out"
 
 # 9. live repo sync — proves mirror + keyring + DNS in one shot
